@@ -1,0 +1,71 @@
+import json
+import boto3
+from datetime import datetime
+import time
+
+s4 = boto3.client('s3')
+def lambda_handler(event, context):
+    
+    s3 = boto3.resource('s3')
+    #Get the name of the file that was load to S3, this file will trigger the lambda.
+    key=event['Records'][0]['s3']['object']['key']
+    copy_source = {
+    'Bucket': 'ipan-source',
+    
+    'Key': key
+     }
+    
+	#Create an object with the file recently uploaded to S3 bucket
+    data = s4.get_object(Bucket='ipan-source', Key=key)
+    #Get the body of the file that was loaded.
+    json_data= data['Body'].read().decode('utf-8')
+    print(type(json_data))
+    #Convert the content of the file into a dictionary
+    son=json.loads(json_data)
+    #Aux variable
+    variable=[]
+    
+    prefix = datetime.now().strftime("%c")
+    for i in range(0,(len(son)-2)):
+      blank_data=s4.get_object(Bucket='ipan-final', Key='blank.txt')
+      blank_body=blank_data['Body'].read().decode('utf-8')
+      d=son[i]["mets"][0]["stamp"]
+      d="{"+"\"timestamp\"" +":\""+d+"\""
+      variable.append(d)
+      e=son[i]["mets"][0]["device"]
+      f="\"device\"" +":"+"\""+e+"\""
+      variable.append(f)
+      for j in range(0,len(son[i]["mets"])):
+         a=son[i]["mets"][j]["metric"]
+         test=son[i]["mets"][j]["value"]
+         if a=='busytime' or a=='session':
+            b=str(test)
+            c="\""+a+"\""+":"+b
+         else:
+            test=time.strftime('%H:%M:%S', time.gmtime(test))
+            b=str(test)
+            c="\""+a+"\""+":\""+test+"\" "
+         variable.append(c)
+         text=""
+      for k in range(0,len(variable)):
+          if k<(len(variable)-1):
+            text=text+variable[k]+","
+          if k==(len(variable)-1):
+            text=text+variable[k]+"}"  
+      final=blank_body+text+"\n"
+      s4.put_object(Body=final, Bucket='ipan-final', Key='blank.txt')
+      #print(variable)
+      variable=[]
+      text=""
+    bucket = s3.Bucket('ipan-final')
+    copy_final = {
+    'Bucket': 'ipan-final',
+    #regularexpresion feature to do 
+    'Key': 'blank.txt'
+    }
+    bucket.copy(copy_final,'results/Result_'+prefix)
+    reset=""
+    s4.put_object(Body=reset, Bucket='ipan-final', Key='blank.txt')
+    print('hello')
+
+
